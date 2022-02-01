@@ -1,0 +1,109 @@
+>>> from pyspark.sql.functions import col, first, sum
+>>> df = spark.read.option('header', True).option('sep',',').option('inferSchema',True).csv('owid-covid-data.csv')
+>>> df.count()
+82289
+>>> df.select('date','iso_code','location', (col('total_cases') / col('population') * 100).alias('recovered_perc')).where((col('date')=='2020-03-31') & (col('iso_code') != 'OWID_EUN') ).orderBy(col('recovered_perc').desc()).show(15)
++----------+--------+-------------+-------------------+
+|      date|iso_code|     location|     recovered_perc|
++----------+--------+-------------+-------------------+
+|2020-03-31|     VAT|      Vatican| 0.7416563658838072|
+|2020-03-31|     SMR|   San Marino| 0.6953857033413873|
+|2020-03-31|     AND|      Andorra| 0.4866368989840161|
+|2020-03-31|     LUX|   Luxembourg| 0.3479366621084514|
+|2020-03-31|     ISL|      Iceland| 0.3326007326007326|
+|2020-03-31|     ESP|        Spain|0.20516189755388237|
+|2020-03-31|     CHE|  Switzerland|0.19186288753587968|
+|2020-03-31|     LIE|Liechtenstein|0.17830453365498072|
+|2020-03-31|     ITA|        Italy| 0.1749732078891164|
+|2020-03-31|     MCO|       Monaco|0.13250433187238814|
+|2020-03-31|     AUT|      Austria|0.11303073370047965|
+|2020-03-31|     BEL|      Belgium|0.11022798339479065|
+|2020-03-31|     DEU|      Germany|0.08570615766540952|
+|2020-03-31|     NOR|       Norway|0.08560768916052816|
+|2020-03-31|     FRA|       France|0.07671280171255115|
++----------+--------+-------------+-------------------+
+only showing top 15 rows
+
+>>>
+>>>
+>>> df.select('date','iso_code','location', (col('total_cases') / col('population') * 100).alias('recovered_perc')).where((col('date')=='2021-03-31') & (col('iso_code') != 'OWID_EUN') ).orderBy(col('recovered_perc').desc()).show(15)
++----------+--------+-------------+------------------+
+|      date|iso_code|     location|    recovered_perc|
++----------+--------+-------------+------------------+
+|2021-03-31|     AND|      Andorra|15.543907331909661|
+|2021-03-31|     MNE|   Montenegro|14.523725364693293|
+|2021-03-31|     CZE|      Czechia|14.308848404077997|
+|2021-03-31|     SMR|   San Marino|13.937179562732041|
+|2021-03-31|     SVN|     Slovenia|10.370805779121204|
+|2021-03-31|     LUX|   Luxembourg| 9.847342390123583|
+|2021-03-31|     ISR|       Israel| 9.625106044786802|
+|2021-03-31|     USA|United States| 9.203010995860707|
+|2021-03-31|     SRB|       Serbia| 8.826328557933492|
+|2021-03-31|     BHR|      Bahrain| 8.488860079114566|
+|2021-03-31|     PAN|       Panama| 8.228739065460761|
+|2021-03-31|     PRT|     Portugal| 8.058699735120369|
+|2021-03-31|     EST|      Estonia| 8.022681579659551|
+|2021-03-31|     SWE|       Sweden| 7.969744347858805|
+|2021-03-31|     LTU|    Lithuania| 7.938864728274825|
++----------+--------+-------------+------------------+
+only showing top 15 rows
+
+>>>
+>>>
+>>>
+>>>
+>>>
+>>>
+>>>
+>>>
+>>>
+>>> df2 = df.select('iso_code','date', 'location', 'new_cases').where((col('date') >= '2021-03-25') & (col('date') <= '2021-03-31') & (~col('iso_code').isin('OWID_WRL','OWID_EUR','OWID_EUN','OWID_ASI','OWID_SAM','OWID_NAM', 'OWID_AFR'))).orderBy(col('location'), col('new_cases').desc())
+>>>
+>>> df2.groupBy('location').agg(first('date').alias('date'), sum('new_cases').alias('total')).orderBy(col('total').desc()).show(10)
++-------------+----------+--------+
+|     location|      date|   total|
++-------------+----------+--------+
+|       Brazil|2021-03-25|528736.0|
+|United States|2021-03-26|448300.0|
+|        India|2021-03-31|434131.0|
+|       France|2021-03-31|266069.0|
+|       Turkey|2021-03-31|225900.0|
+|       Poland|2021-03-26|201046.0|
+|        Italy|2021-03-26|144037.0|
+|      Germany|2021-03-31|120656.0|
+|      Ukraine|2021-03-26| 95016.0|
+|    Argentina|2021-03-31| 78944.0|
++-------------+----------+--------+
+only showing top 10 rows
+
+>>>
+>>>
+>>>
+>>>
+>>> from pyspark.sql.window import Window
+>>> import pyspark.sql.functions as func
+>>>
+>>> df3 =  df.select('iso_code','date', 'location', 'new_cases').where((col('date') >= '2021-03-25') & (col('date') <= '2021-03-31') & (col('iso_code').isin('RUS'))).orderBy(col('date'))
+
+>>>
+>>> df3_lag = df3.withColumn('prev_new_cases', func.lag(df3['new_cases']).over(Window.partitionBy('location').orderBy('date')))
+>>>
+>>> df3_lag.select(col('date'), col('prev_new_cases'), col('new_cases'), (col('new_cases')-col('prev_new_cases')).alias('delta')).show()
++----------+--------------+---------+------+
+|      date|prev_new_cases|new_cases| delta|
++----------+--------------+---------+------+
+|2021-03-25|          null|   9128.0|  null|
+|2021-03-26|        9128.0|   9073.0| -55.0|
+|2021-03-27|        9073.0|   8783.0|-290.0|
+|2021-03-28|        8783.0|   8979.0| 196.0|
+|2021-03-29|        8979.0|   8589.0|-390.0|
+|2021-03-30|        8589.0|   8162.0|-427.0|
+|2021-03-31|        8162.0|   8156.0|  -6.0|
++----------+--------------+---------+------+
+
+>>>
+>>>
+
+
+
+
